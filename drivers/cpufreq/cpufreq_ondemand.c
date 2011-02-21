@@ -103,6 +103,7 @@ enum {DBS_NORMAL_SAMPLE, DBS_SUB_SAMPLE};
 
 struct cpu_dbs_info_s {
 	cputime64_t prev_cpu_idle;
+	cputime64_t prev_cpu_iowait;
 	cputime64_t prev_cpu_wall;
 	cputime64_t prev_cpu_nice;
 	struct cpufreq_policy *cur_policy;
@@ -583,7 +584,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 		iowait_time = (unsigned int) cputime64_sub(cur_iowait_time,
 		        j_dbs_info->prev_cpu_iowait);
-
+		j_dbs_info->prev_cpu_iowait = cur_iowait_time;
+		
 		if (dbs_tuners_ins.ignore_nice) {
 			cputime64_t cur_nice;
 			unsigned long cur_nice_jiffies;
