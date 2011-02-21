@@ -287,7 +287,7 @@ static void acpuclk_set_div(const struct clkctl_acpu_speed *hunt_s) {
    
         if (hunt_s->a11clk_khz > 528000 && hunt_s->pll2_lval > 0) { 
            a11_div=0; 
-           writel(hunt_s->pll2_lval, MSM_CLK_CTL_BASE+A11S_CLK_CTL_PLL2); 
+           writel(hunt_s->pll2_lval, A11S_CLK_CTL_PLL2); 
            udelay(50); 
         } 
 
