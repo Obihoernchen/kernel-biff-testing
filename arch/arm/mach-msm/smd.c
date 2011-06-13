@@ -39,6 +39,12 @@
 #define CONFIG_QDSP6 1
 #endif
 
+#if 0
+#define DBG(x...) printk(x)
+#else
+#define DBG(x...) do {} while (0)
+#endif
+
 // for DUMP
 #define DUMP_BIN_INCREASEMENT 	128
 #define DUMP_TXT_INCREASEMENT 	1024
@@ -86,6 +92,7 @@ static inline void msm_a2m_int(uint32_t irq)
 
 static inline void notify_other_smsm(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	msm_a2m_int(5);
 #ifdef CONFIG_QDSP6
 	msm_a2m_int(8);
@@ -94,11 +101,13 @@ static inline void notify_other_smsm(void)
 
 static inline void notify_modem_smd(void)
 {
+	DBG("smd_notify_modem_smd\n");
 	msm_a2m_int(0);
 }
 
 static inline void notify_dsp_smd(void)
 {
+	DBG("smd_notify_dsp_smd\n");
 	msm_a2m_int(8);
 }
 
@@ -161,6 +170,7 @@ void mem_dump_32( unsigned int addr)
 /* call when SMSM_RESET flag is set in the A9's smsm_state */
 static void handle_modem_crash(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned char *dpramBase; // SmemBase;
 
   // for DUMP
@@ -177,8 +187,8 @@ static void handle_modem_crash(void)
 	//smd_diag();
 
 	/* hard reboot if possible */
-	//if (msm_hw_reset_hook)
-	//	msm_hw_reset_hook();
+	if (msm_hw_reset_hook)
+		msm_hw_reset_hook();
 
 	/* in this case the modem or watchdog should reboot us */
 	//for (;;)
@@ -195,7 +205,6 @@ uint32_t raw_smsm_get_state(enum smsm_state_item item)
 
 static int check_for_modem_crash(void)
 {
-
 	if (raw_smsm_get_state(SMSM_STATE_MODEM) & SMSM_RESET) {
 		handle_modem_crash();
 		return -1;
@@ -228,18 +237,21 @@ static struct work_struct probe_work;
 /* how many bytes are available for reading */
 static int smd_stream_read_avail(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return (ch->recv->head - ch->recv->tail) & ch->fifo_mask;
 }
 
 /* how many bytes we are free to write */
 static int smd_stream_write_avail(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->fifo_mask -
 		((ch->send->head - ch->send->tail) & ch->fifo_mask);
 }
 
 static int smd_packet_read_avail(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	if (ch->current_packet) {
 		int n = smd_stream_read_avail(ch);
 		if (n > ch->current_packet)
@@ -252,12 +264,14 @@ static int smd_packet_read_avail(struct smd_channel *ch)
 
 static int smd_packet_write_avail(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	int n = smd_stream_write_avail(ch);
 	return n > SMD_HEADER_SIZE ? n - SMD_HEADER_SIZE : 0;
 }
 
 static int ch_is_open(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return (ch->recv->state == SMD_SS_OPENED) &&
 		(ch->send->state == SMD_SS_OPENED);
 }
@@ -265,6 +279,7 @@ static int ch_is_open(struct smd_channel *ch)
 /* provide a pointer and length to readable data in the fifo */
 static unsigned ch_read_buffer(struct smd_channel *ch, void **ptr)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned head = ch->recv->head;
 	unsigned tail = ch->recv->tail;
 	*ptr = (void *) (ch->recv_data + tail);
@@ -278,6 +293,7 @@ static unsigned ch_read_buffer(struct smd_channel *ch, void **ptr)
 /* advance the fifo read pointer after data from ch_read_buffer is consumed */
 static void ch_read_done(struct smd_channel *ch, unsigned count)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	BUG_ON(count > smd_stream_read_avail(ch));
 	ch->recv->tail = (ch->recv->tail + count) & ch->fifo_mask;
 	ch->send->fTAIL = 1;
@@ -289,6 +305,7 @@ static void ch_read_done(struct smd_channel *ch, unsigned count)
  */
 static int ch_read(struct smd_channel *ch, void *_data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	void *ptr;
 	unsigned n;
 	unsigned char *data = _data;
@@ -303,7 +320,7 @@ static int ch_read(struct smd_channel *ch, void *_data, int len)
 			n = len;
 		if (_data)
 			memcpy(data, ptr, n);
-
+		DBG("SMD-R(%s) %.*x\n", ch->name, n, ptr);
 		data += n;
 		len -= n;
 		ch_read_done(ch, n);
@@ -314,11 +331,13 @@ static int ch_read(struct smd_channel *ch, void *_data, int len)
 
 static void update_stream_state(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	/* streams have no special state requiring updating */
 }
 
 static void update_packet_state(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned hdr[5];
 	int r;
 
@@ -339,6 +358,7 @@ static void update_packet_state(struct smd_channel *ch)
 /* provide a pointer and length to next free space in the fifo */
 static unsigned ch_write_buffer(struct smd_channel *ch, void **ptr)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned head = ch->send->head;
 	unsigned tail = ch->send->tail;
 	*ptr = (void *) (ch->send_data + head);
@@ -358,6 +378,7 @@ static unsigned ch_write_buffer(struct smd_channel *ch, void **ptr)
  */
 static void ch_write_done(struct smd_channel *ch, unsigned count)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	BUG_ON(count > smd_stream_write_avail(ch));
 	ch->send->head = (ch->send->head + count) & ch->fifo_mask;
 	ch->send->fHEAD = 1;
@@ -365,6 +386,8 @@ static void ch_write_done(struct smd_channel *ch, unsigned count)
 
 static void ch_set_state(struct smd_channel *ch, unsigned n)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
+	DBG("smd_ch_set_state (%d:%s)\n", ch->n, ch->name);
 	if (n == SMD_SS_OPENED) {
 		ch->send->fDSR = 1;
 		ch->send->fCTS = 1;
@@ -381,6 +404,7 @@ static void ch_set_state(struct smd_channel *ch, unsigned n)
 
 static void do_smd_probe(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smem_shared *shared = (void *) MSM_SHARED_RAM_BASE;
 	if (shared->heap_info.free_offset != last_heap_free) {
 		last_heap_free = shared->heap_info.free_offset;
@@ -391,6 +415,7 @@ static void do_smd_probe(void)
 static void smd_state_change(struct smd_channel *ch,
 			     unsigned last, unsigned next)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	ch->last_state = next;
 
 	pr_info("SMD: ch %d %d -> %d\n", ch->n, last, next);
@@ -413,6 +438,7 @@ static void smd_state_change(struct smd_channel *ch,
 
 static void handle_smd_irq(struct list_head *list, void (*notify)(void))
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	struct smd_channel *ch;
 	int do_notify = 0;
@@ -453,20 +479,38 @@ static void handle_smd_irq(struct list_head *list, void (*notify)(void))
 	do_smd_probe();
 }
 
+void smsm_reset_modem(unsigned mode)
+{
+    DBG(KERN_INFO "%s: enter\n", __func__);
+	if (mode == SMSM_SYSTEM_DOWNLOAD) {
+		mode = SMSM_RESET | SMSM_SYSTEM_DOWNLOAD;
+	} else if (mode == SMSM_MODEM_WAIT) {
+		mode = SMSM_RESET | SMSM_MODEM_WAIT;
+	} else { /* reset_mode is SMSM_RESET or default */
+		mode = SMSM_RESET;
+	}
+
+	smsm_change_state(SMSM_STATE_APPS, mode, mode);
+}
+EXPORT_SYMBOL(smsm_reset_modem);
+
 static irqreturn_t smd_modem_irq_handler(int irq, void *data)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	handle_smd_irq(&smd_ch_list_modem, notify_modem_smd);
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t smd_dsp_irq_handler(int irq, void *data)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	handle_smd_irq(&smd_ch_list_dsp, notify_dsp_smd);
 	return IRQ_HANDLED;
 }
 
 static void smd_fake_irq_handler(unsigned long arg)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	handle_smd_irq(&smd_ch_list_modem, notify_modem_smd);
 	handle_smd_irq(&smd_ch_list_dsp, notify_dsp_smd);
 }
@@ -475,6 +519,7 @@ static DECLARE_TASKLET(smd_fake_irq_tasklet, smd_fake_irq_handler, 0);
 
 static inline int smd_need_int(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	if (ch_is_open(ch)) {
 		if (ch->recv->fHEAD || ch->recv->fTAIL || ch->recv->fSTATE)
 			return 1;
@@ -486,6 +531,7 @@ static inline int smd_need_int(struct smd_channel *ch)
 
 void smd_sleep_exit(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	struct smd_channel *ch;
 	int need_int = 0;
@@ -516,6 +562,7 @@ void smd_sleep_exit(void)
 
 void smd_kick(smd_channel_t *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	unsigned tmp;
 
@@ -536,6 +583,7 @@ void smd_kick(smd_channel_t *ch)
 
 static int smd_is_packet(int chn, unsigned type)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	type &= SMD_KIND_MASK;
 	if (type == SMD_KIND_PACKET)
 		return 1;
@@ -551,6 +599,7 @@ static int smd_is_packet(int chn, unsigned type)
 
 static int smd_stream_write(smd_channel_t *ch, const void *_data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	void *ptr;
 	const unsigned char *buf = _data;
 	unsigned xfer;
@@ -565,6 +614,7 @@ static int smd_stream_write(smd_channel_t *ch, const void *_data, int len)
 		if (xfer > len)
 			xfer = len;
 		memcpy(ptr, buf, xfer);
+		DBG("SMD-W(%s) %.*x\n", ch->name, xfer, buf);
 		ch_write_done(ch, xfer);
 		len -= xfer;
 		buf += xfer;
@@ -579,6 +629,7 @@ static int smd_stream_write(smd_channel_t *ch, const void *_data, int len)
 
 static int smd_packet_write(smd_channel_t *ch, const void *_data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned hdr[5];
 
 	if (len < 0)
@@ -598,6 +649,7 @@ static int smd_packet_write(smd_channel_t *ch, const void *_data, int len)
 
 static int smd_stream_read(smd_channel_t *ch, void *data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	int r;
 
 	if (len < 0)
@@ -612,6 +664,7 @@ static int smd_stream_read(smd_channel_t *ch, void *data, int len)
 
 static int smd_packet_read(smd_channel_t *ch, void *data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	int r;
 
@@ -621,6 +674,7 @@ static int smd_packet_read(smd_channel_t *ch, void *data, int len)
 	if (len > ch->current_packet)
 		len = ch->current_packet;
 
+	DBG("SMD-R(%s) %.*x\n", ch->name, len, data);
 	r = ch_read(ch, data, len);
 	if (r > 0)
 		ch->notify_other_cpu();
@@ -635,6 +689,7 @@ static int smd_packet_read(smd_channel_t *ch, void *data, int len)
 
 static int smd_alloc_v2(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smd_shared_v2 *shared2;
 	void *buffer;
 	unsigned buffer_sz;
@@ -660,6 +715,7 @@ static int smd_alloc_v2(struct smd_channel *ch)
 
 static int smd_alloc_v1(struct smd_channel *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smd_shared_v1 *shared1;
 	shared1 = smem_alloc(ID_SMD_CHANNELS + ch->n, sizeof(*shared1));
 	if (!shared1) {
@@ -677,6 +733,7 @@ static int smd_alloc_v1(struct smd_channel *ch)
 
 static int smd_alloc_channel(const char *name, uint32_t cid, uint32_t type)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smd_channel *ch;
 
 	ch = kzalloc(sizeof(struct smd_channel), GFP_KERNEL);
@@ -771,10 +828,12 @@ static void smd_channel_probe_worker(struct work_struct *work)
 
 static void do_nothing_notify(void *priv, unsigned flags)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 }
 
 struct smd_channel *smd_get_channel(const char *name)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smd_channel *ch;
 
 	mutex_lock(&smd_creation_mutex);
@@ -793,6 +852,7 @@ struct smd_channel *smd_get_channel(const char *name)
 int smd_open(const char *name, smd_channel_t **_ch,
 	     void *priv, void (*notify)(void *, unsigned))
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smd_channel *ch;
 	unsigned long flags;
 
@@ -802,8 +862,12 @@ int smd_open(const char *name, smd_channel_t **_ch,
 	}
 
 	ch = smd_get_channel(name);
-	if (!ch)
+	if (!ch) {
+		printk("smd_open: channel not found \"%s\"\n", name);
 		return -ENODEV;
+	}
+
+	DBG("smd_open: (%d:%s)\n", ch->n, ch->name);
 
 	if (notify == 0)
 		notify = do_nothing_notify;
@@ -844,6 +908,7 @@ int smd_open(const char *name, smd_channel_t **_ch,
 
 int smd_close(smd_channel_t *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 
 	pr_info("smd_close(%p)\n", ch);
@@ -866,16 +931,19 @@ int smd_close(smd_channel_t *ch)
 
 int smd_read(smd_channel_t *ch, void *data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->read(ch, data, len);
 }
 
 int smd_write(smd_channel_t *ch, const void *data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->write(ch, data, len);
 }
 
 int smd_write_atomic(smd_channel_t *ch, const void *data, int len)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	int res;
 	spin_lock_irqsave(&smd_lock, flags);
@@ -886,26 +954,31 @@ int smd_write_atomic(smd_channel_t *ch, const void *data, int len)
 
 int smd_read_avail(smd_channel_t *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->read_avail(ch);
 }
 
 int smd_write_avail(smd_channel_t *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->write_avail(ch);
 }
 
 int smd_wait_until_readable(smd_channel_t *ch, int bytes)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return -1;
 }
 
 int smd_wait_until_writable(smd_channel_t *ch, int bytes)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return -1;
 }
 
 int smd_cur_packet_size(smd_channel_t *ch)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return ch->current_packet;
 }
 
@@ -914,11 +987,13 @@ int smd_cur_packet_size(smd_channel_t *ch)
 
 void *smem_alloc(unsigned id, unsigned size)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return smem_find(id, size);
 }
 
 void *smem_item(unsigned id, unsigned *size)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct smem_shared *shared = (void *) MSM_SHARED_RAM_BASE;
 	struct smem_heap_entry *toc = shared->heap_toc;
 
@@ -937,6 +1012,7 @@ void *smem_item(unsigned id, unsigned *size)
 
 void *smem_find(unsigned id, unsigned size_in)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned size;
 	void *ptr;
 
@@ -956,6 +1032,7 @@ void *smem_find(unsigned id, unsigned size_in)
 
 static irqreturn_t smsm_irq_handler(int irq, void *data)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	unsigned apps, modm;
 
@@ -979,6 +1056,7 @@ int smsm_change_state(enum smsm_state_item item,
 		      uint32_t clear_mask, uint32_t set_mask)
 {
 	unsigned long addr = smd_info.state + item * 4;
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	unsigned state;
 
@@ -1004,6 +1082,7 @@ int smsm_change_state(enum smsm_state_item item,
 
 uint32_t smsm_get_state(enum smsm_state_item item)
 {
+//    DBG(KERN_INFO "%s: enter\n", __func__);
 	unsigned long flags;
 	uint32_t rv;
 
@@ -1023,6 +1102,7 @@ uint32_t smsm_get_state(enum smsm_state_item item)
 
 int smsm_set_sleep_duration(uint32_t delay)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	struct msm_dem_slave_data *ptr;
 
 	ptr = smem_find(SMEM_APPS_DEM_SLAVE_DATA, sizeof(*ptr));
@@ -1041,6 +1121,7 @@ int smsm_set_sleep_duration(uint32_t delay)
 
 int smsm_set_sleep_duration(uint32_t delay)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	uint32_t *ptr;
 
 	ptr = smem_find(SMEM_SMSM_SLEEP_DELAY, sizeof(*ptr));
@@ -1059,6 +1140,7 @@ int smsm_set_sleep_duration(uint32_t delay)
 
 int smd_core_init(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	int r;
 	pr_info("smd_core_init()\n");
 
@@ -1122,6 +1204,7 @@ extern void msm_init_last_radio_log(struct module *);
 
 static int msm_smd_probe(struct platform_device *pdev)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	pr_info("smd_init()\n");
 
   proc_comm_boot_wait();
@@ -1155,6 +1238,7 @@ static struct platform_driver msm_smd_driver = {
 
 static int __init msm_smd_init(void)
 {
+    DBG(KERN_INFO "%s: enter\n", __func__);
 	return platform_driver_register(&msm_smd_driver);
 }
 
